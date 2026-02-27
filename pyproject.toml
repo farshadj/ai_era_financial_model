@@ -1,0 +1,10 @@
+[project]
+name = "ai-economy-model"
+version = "0.1.0"
+description = "AI Superintelligence & Robot Automation Economic Forecasting Model"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
