@@ -58,6 +58,17 @@ def main():
         print(f"  Total Displaced:        {metrics['total_displaced']:,.0f}")
         print(f"  Displacement Rate:      {metrics['displacement_rate']:.1%}")
 
+        # ETF predictions
+        for ticker in ["SPY", "QQQ"]:
+            cum_key = f"{ticker}_cumulative_return"
+            ann_key = f"{ticker}_annualized_return"
+            dd_key = f"{ticker}_max_drawdown"
+            if cum_key in metrics:
+                cum_ret = metrics[cum_key] - 1  # Convert from multiplier
+                print(f"  {ticker} Cumulative Return: {cum_ret:+.1%}")
+                print(f"  {ticker} Annualized Return: {metrics[ann_key]:+.1%}")
+                print(f"  {ticker} Max Drawdown:      {metrics[dd_key]:.1%}")
+
     print(f"\n{'=' * 70}")
     print("  Simulation complete.")
     print("=" * 70)

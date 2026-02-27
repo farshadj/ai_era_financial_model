@@ -204,6 +204,86 @@ with tab2:
         fig_stocks.update_layout(yaxis_tickformat=".0%", height=400)
         st.plotly_chart(fig_stocks, use_container_width=True)
 
+    # ------------------------------------------------------------------
+    # ETF Performance Predictions (SPY & QQQ)
+    # ------------------------------------------------------------------
+
+    if results.etf_returns is not None:
+        st.subheader("📊 SPY & QQQ Performance Forecast")
+
+        etf_df = results.etf_returns
+        final_etf = etf_df[etf_df["month"] == etf_df["month"].max()]
+
+        # KPI cards
+        etf_cols = st.columns(len(final_etf))
+        for i, (_, row) in enumerate(final_etf.iterrows()):
+            ticker = row["etf"]
+            with etf_cols[i]:
+                cum_ret = row["cumulative_return"] - 1  # Convert from multiplier
+                ann_ret = row["annualized_return"]
+                max_dd = float(etf_df[etf_df["etf"] == ticker]["drawdown"].min())
+                st.metric(
+                    f"{ticker} ({row['etf_name']})",
+                    f"{cum_ret:+.1%}",
+                    delta=f"Ann: {ann_ret:+.1%} | Max DD: {max_dd:.1%}",
+                )
+
+        # Cumulative price chart
+        fig_etf_price = go.Figure()
+        for ticker in etf_df["etf"].unique():
+            tk_data = etf_df[etf_df["etf"] == ticker]
+            fig_etf_price.add_trace(go.Scatter(
+                x=tk_data["month"], y=tk_data["price"],
+                mode="lines", name=ticker,
+                line=dict(width=2.5),
+            ))
+        fig_etf_price.add_hline(y=100, line_dash="dash", line_color="gray",
+                                 annotation_text="Starting price (100)")
+        fig_etf_price.update_layout(
+            title=f"SPY vs QQQ Price Forecast ({months} months, base=100)",
+            yaxis_title="Price Index", xaxis_title="Month",
+            height=420,
+        )
+        st.plotly_chart(fig_etf_price, use_container_width=True)
+
+        # Monthly returns comparison + drawdown
+        col_ret, col_dd = st.columns(2)
+        with col_ret:
+            fig_monthly = px.line(
+                etf_df, x="month", y="monthly_return", color="etf",
+                title="Monthly Returns",
+            )
+            fig_monthly.update_layout(yaxis_tickformat=".1%", height=300)
+            st.plotly_chart(fig_monthly, use_container_width=True)
+        with col_dd:
+            fig_dd = px.area(
+                etf_df, x="month", y="drawdown", color="etf",
+                title="Drawdown From Peak",
+            )
+            fig_dd.update_layout(yaxis_tickformat=".0%", height=300)
+            st.plotly_chart(fig_dd, use_container_width=True)
+
+        # Return range table
+        st.markdown("**Predicted Return Ranges**")
+        range_records = []
+        for ticker in etf_df["etf"].unique():
+            tk = etf_df[etf_df["etf"] == ticker]
+            # Rolling 12-month returns for range estimation
+            monthly_rets = tk["monthly_return"].values
+            cum_final = float(tk["cumulative_return"].iloc[-1])
+            ann_vol = float(monthly_rets.std() * np.sqrt(12))
+            ann_ret = cum_final ** (12 / months) - 1
+            range_records.append({
+                "ETF": ticker,
+                "Cumulative Return": f"{(cum_final - 1):+.1%}",
+                "Annualized Return": f"{ann_ret:+.1%}",
+                "Annualized Volatility": f"{ann_vol:.1%}",
+                "Best Month": f"{monthly_rets.max():+.1%}",
+                "Worst Month": f"{monthly_rets.min():+.1%}",
+                "Max Drawdown": f"{float(tk['drawdown'].min()):.1%}",
+            })
+        st.dataframe(pd.DataFrame(range_records), use_container_width=True, hide_index=True)
+
     if results.vix is not None:
         st.subheader("Market Volatility (VIX)")
         fig_vix = px.line(results.vix, x="month", y="vix", title="VIX Forecast")

@@ -52,6 +52,34 @@ COMMODITIES = {
 }
 
 # Geographic real estate baseline appreciation rates
+# ---------------------------------------------------------------------------
+# ETF composition weights (approximate S&P 500 / Nasdaq-100 sector weights)
+# Keys match EQUITY_SECTORS keys above
+# ---------------------------------------------------------------------------
+
+ETF_DEFINITIONS = {
+    "SPY": {
+        "name": "S&P 500",
+        "weights": {
+            "technology": 0.30, "financials": 0.13, "healthcare": 0.13,
+            "consumer_disc": 0.10, "industrials": 0.09, "communication": 0.09,
+            "consumer_stap": 0.06, "energy": 0.04, "utilities": 0.02,
+            "real_estate": 0.02, "materials": 0.02,
+        },
+        "tracking_error_annual": 0.003,  # Very tight tracking
+    },
+    "QQQ": {
+        "name": "Nasdaq-100",
+        "weights": {
+            "technology": 0.50, "communication": 0.16, "consumer_disc": 0.14,
+            "healthcare": 0.07, "industrials": 0.05, "consumer_stap": 0.04,
+            "financials": 0.01, "utilities": 0.01, "energy": 0.01,
+            "real_estate": 0.005, "materials": 0.005,
+        },
+        "tracking_error_annual": 0.004,
+    },
+}
+
 METRO_RE_PROFILES = {
     "SF Bay Area":     {"base_appreciation": 0.05, "ai_hub": True, "ai_beta": 2.0},
     "Seattle":         {"base_appreciation": 0.04, "ai_hub": True, "ai_beta": 1.8},
@@ -311,6 +339,77 @@ class FinancialMarketsModel:
                     "price_index": round(idx, 2),
                     "is_ai_hub": params["ai_hub"],
                     "monthly_change": round(monthly_change, 5),
+                })
+
+        return pd.DataFrame(records)
+
+    # ------------------------------------------------------------------
+    # ETF projections (SPY, QQQ)
+    # ------------------------------------------------------------------
+
+    def project_etf_returns(
+        self,
+        scenario: ScenarioParams,
+        months: int = 60,
+        rng: Optional[np.random.Generator] = None,
+        sector_returns: Optional[pd.DataFrame] = None,
+    ) -> pd.DataFrame:
+        """
+        Project ETF (SPY, QQQ) monthly and cumulative returns.
+
+        Derived from sector returns using market-cap weight vectors, plus
+        a small tracking-error noise term.
+
+        Returns:
+            DataFrame with columns: month, year, etf, monthly_return,
+            cumulative_return, annualized_return, drawdown, price
+        """
+        if rng is None:
+            rng = np.random.default_rng(42)
+
+        # Generate sector returns if not provided
+        if sector_returns is None:
+            sector_returns = self.project_sector_returns(scenario, months, rng)
+
+        records: list[dict] = []
+
+        for ticker, etf_def in ETF_DEFINITIONS.items():
+            weights = etf_def["weights"]
+            te_monthly = etf_def["tracking_error_annual"] / np.sqrt(12)
+            cum_return = 1.0
+            peak = 1.0
+            base_price = 100.0  # Normalised start
+
+            for m in range(1, months + 1):
+                # Weighted average of sector monthly returns
+                month_sectors = sector_returns[sector_returns["month"] == m]
+                weighted_ret = 0.0
+                for sector, w in weights.items():
+                    sec_row = month_sectors[month_sectors["sector"] == sector]
+                    if not sec_row.empty:
+                        weighted_ret += w * float(sec_row["monthly_return"].iloc[0])
+
+                # Add tracking error
+                weighted_ret += rng.normal(0, te_monthly)
+
+                cum_return *= (1 + weighted_ret)
+                peak = max(peak, cum_return)
+                drawdown = (cum_return - peak) / peak
+
+                # Annualized return from cumulative
+                ann_return = cum_return ** (12 / m) - 1 if m > 0 else 0.0
+
+                year = 2026 + (m - 1) // 12
+                records.append({
+                    "month": m,
+                    "year": year,
+                    "etf": ticker,
+                    "etf_name": etf_def["name"],
+                    "monthly_return": round(weighted_ret, 5),
+                    "cumulative_return": round(cum_return, 4),
+                    "annualized_return": round(ann_return, 4),
+                    "drawdown": round(drawdown, 4),
+                    "price": round(base_price * cum_return, 2),
                 })
 
         return pd.DataFrame(records)

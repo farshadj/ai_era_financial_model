@@ -32,6 +32,7 @@ class SimulationResults:
         self.labor_aggregate: Optional[pd.DataFrame] = None
         self.sectors: Optional[pd.DataFrame] = None
         self.ai_stocks: Optional[pd.DataFrame] = None
+        self.etf_returns: Optional[pd.DataFrame] = None
         self.bonds: Optional[pd.DataFrame] = None
         self.commodities: Optional[pd.DataFrame] = None
         self.real_estate: Optional[pd.DataFrame] = None
@@ -69,6 +70,16 @@ class SimulationResults:
                 metrics["ai_hub_re_index"] = round(float(ai_hub_re["price_index"].mean()), 1)
             if not at_risk_re.empty:
                 metrics["at_risk_re_index"] = round(float(at_risk_re["price_index"].mean()), 1)
+
+        if self.etf_returns is not None and not self.etf_returns.empty:
+            final_etf = self.etf_returns[self.etf_returns["month"] == self.etf_returns["month"].max()]
+            for _, row in final_etf.iterrows():
+                ticker = row["etf"]
+                metrics[f"{ticker}_cumulative_return"] = round(float(row["cumulative_return"]), 4)
+                metrics[f"{ticker}_annualized_return"] = round(float(row["annualized_return"]), 4)
+                metrics[f"{ticker}_max_drawdown"] = round(
+                    float(self.etf_returns[self.etf_returns["etf"] == ticker]["drawdown"].min()), 4
+                )
 
         return metrics
 
@@ -137,6 +148,10 @@ class SimulationEngine:
         # 3. Financial markets (use separate RNG streams for independence)
         results.sectors = self.financial_model.project_sector_returns(scenario, months, np.random.default_rng(rng.integers(1e9)))
         results.ai_stocks = self.financial_model.project_ai_stock_returns(scenario, months, np.random.default_rng(rng.integers(1e9)))
+        results.etf_returns = self.financial_model.project_etf_returns(
+            scenario, months, np.random.default_rng(rng.integers(1e9)),
+            sector_returns=results.sectors,
+        )
         results.bonds = self.financial_model.project_bond_yields(scenario, months, np.random.default_rng(rng.integers(1e9)))
         results.commodities = self.financial_model.project_commodities(scenario, months, np.random.default_rng(rng.integers(1e9)))
         results.real_estate = self.financial_model.project_real_estate(scenario, months, np.random.default_rng(rng.integers(1e9)))

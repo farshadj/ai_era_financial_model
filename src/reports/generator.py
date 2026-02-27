@@ -192,9 +192,31 @@ class ReportGenerator:
             for _, r in bot.iterrows():
                 lines.append(f"  - {r['sector']}: {_pct(r['cumulative_return'])}")
 
+        # ETF Predictions
+        if results.etf_returns is not None:
+            lines.append("\n### 2.4 ETF Performance Predictions (SPY & QQQ)\n")
+            etf_df = results.etf_returns
+            final_etf = etf_df[etf_df["month"] == etf_df["month"].max()]
+            lines.append("| ETF | Cumulative | Annualized | Max Drawdown |")
+            lines.append("|-----|-----------|------------|-------------|")
+            for _, row in final_etf.iterrows():
+                ticker = row["etf"]
+                cum = row["cumulative_return"] - 1
+                ann = row["annualized_return"]
+                max_dd = float(etf_df[etf_df["etf"] == ticker]["drawdown"].min())
+                lines.append(f"| {ticker} ({row['etf_name']}) | {_pct(cum)} | {_pct(ann)} | {_pct(max_dd)} |")
+
+            # Monthly statistics
+            for ticker in etf_df["etf"].unique():
+                tk = etf_df[etf_df["etf"] == ticker]
+                rets = tk["monthly_return"].values
+                vol = float(rets.std()) * (12 ** 0.5)
+                lines.append(f"\n**{ticker}:** Ann. vol {_pct(vol)}, "
+                             f"best month {_pct(rets.max())}, worst month {_pct(rets.min())}")
+
         # Real estate
         if results.real_estate is not None:
-            lines.append("\n### 2.4 Real Estate\n")
+            lines.append("\n### 2.5 Real Estate\n")
             re = results.real_estate
             final_re = re[re["month"] == re["month"].max()]
             final_re = final_re.copy()
